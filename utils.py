@@ -44,7 +44,7 @@ def main():
     E = 2.59e9
     nu = 0.35
     df = pd.read_csv("load_test_000.csv", skiprows=7, delimiter=";")
-    # df = df.rolling(10).mean()
+    df = df.rolling(10).mean()
     time = df["Relative time"]
     ng = len(df.columns)//3
 
