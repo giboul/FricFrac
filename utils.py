@@ -1,6 +1,7 @@
 """Module for analyzing fric-frac's results"""
 import numpy as np
-import pandas as pd
+import polars as pl
+from scipy.signal import butter, sosfilt
 from numpy.typing import ArrayLike, NDArray
 from matplotlib import pyplot as plt
 
@@ -43,8 +44,13 @@ def main():
     ampli = -5000e-6
     E = 2.59e9
     nu = 0.35
-    df = pd.read_csv("load_test_000.csv", skiprows=7, delimiter=";")
-    df = df.rolling(10).mean()
+    file = "load_test_000.csv"
+    cols = pl.read_csv(file, separator=";", skip_rows=7, n_rows=1).columns
+    df = pl.read_csv(file, separator=";", skip_rows=9, new_columns=cols)
+    for col in cols[1:]:
+        fs = 1/np.diff(df['Relative time']).mean()
+        sos = butter(1, 1.0, 'lowpass', fs=fs, output='sos')
+        df = df.with_columns(**{col: sosfilt(sos, df[col])})
     time = df["Relative time"]
     ng = len(df.columns)//3
 
@@ -62,10 +68,10 @@ def main():
             [0*e11, 0*e11, -nu/(1-nu)*(e11+e22)]
         ])
         stresses_matrix = hooke(E, nu, strains_matrix)
-        strains = strains_matrix[0, 0, :], strains_matrix[1, 1, :], 2*strains_matrix[0, 1, :]
-        stresses = stresses_matrix[0, 0], stresses_matrix[1, 1], stresses_matrix[0, 1]
+        strains = strains_matrix[0, 0, :], np.abs(strains_matrix[1, 1, :]), 2*strains_matrix[0, 1, :]
+        stresses = stresses_matrix[0, 0], np.abs(stresses_matrix[1, 1]), stresses_matrix[0, 1]
 
-        print("Plotting gauge   ", end='\r')
+        print("Plotting gauges  ", end='\r')
         for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
             axcol[0].set_title(f"Rosette {gauge}")
             axcol[0].plot(time/60, pot, label=rf"$\Delta R_{{{lab}}}$")
