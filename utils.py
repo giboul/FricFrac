@@ -54,10 +54,16 @@ def main():
     time = df["Relative time"]
     ng = len(df.columns)//3
 
-    fig, axes = plt.subplots(nrows=3, ncols=ng, sharex=True, sharey='row', gridspec_kw=dict(hspace=0, wspace=0))
+    df = df.with_columns(**{
+        k: pl.sum_horizontal(*[f"Ch{4*g+i:0>2}" for g in range(ng)])/ng
+        for i, k in enumerate([f"Ch{4*ng+i:0>2}" for i in range(1,4)], start=1)
+    })
+    print(df)
 
-    for gauge, axcol in enumerate(axes.T, start=1):
-        gauges = [f"Ch{4*(gauge-1)+1:0>2}",f"Ch{4*(gauge-1)+2:0>2}",f"Ch{4*(gauge-1)+3:0>2}"]
+    fig, axes = plt.subplots(nrows=3, ncols=ng+1, sharex=True, sharey='row', gridspec_kw=dict(hspace=0, wspace=0))
+
+    for gauge, axcol in enumerate(axes.T):
+        gauges = [f"Ch{4*gauge+1:0>2}",f"Ch{4*gauge+2:0>2}",f"Ch{4*gauge+3:0>2}"]
         print(f"Processing gauges {gauges} {gauge}/{ng} ({gauge/ng:.0%})", end='\r')
         data = df[gauges].to_numpy().T
 
@@ -68,8 +74,8 @@ def main():
             [0*e11, 0*e11, -nu/(1-nu)*(e11+e22)]
         ])
         stresses_matrix = hooke(E, nu, strains_matrix)
-        strains = strains_matrix[0, 0, :], np.abs(strains_matrix[1, 1, :]), 2*strains_matrix[0, 1, :]
-        stresses = stresses_matrix[0, 0], np.abs(stresses_matrix[1, 1]), stresses_matrix[0, 1]
+        strains = strains_matrix[0, 0], strains_matrix[1, 1], np.abs(2*strains_matrix[0, 1])
+        stresses = stresses_matrix[0, 0], stresses_matrix[1, 1], np.abs(stresses_matrix[0, 1])
 
         print("Plotting gauges  ", end='\r')
         for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
@@ -78,6 +84,7 @@ def main():
             axcol[1].plot(time/60, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
             axcol[2].plot(time/60, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
     print()
+    axcol[0].set_title("Moyenne")
     axes[0, 0].legend(loc='upper left')
     axes[1, 0].legend(loc='upper left')
     axes[2, 0].legend(loc='upper left')
