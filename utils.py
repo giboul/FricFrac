@@ -91,9 +91,9 @@ def MeanBrother(file, polars=False):
     fig.suptitle(file.stem)
 
     for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
-        ax1.plot(time/60, pot, label=rf"$\Delta R_{{{lab}}}$")
-        ax2.plot(time/60, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
-        ax3.plot(time/60, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
+        ax1.plot(time, pot, label=rf"$\Delta R_{{{lab}}}$")
+        ax2.plot(time, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
+        ax3.plot(time, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
     print()
     ax1.set_title("Moyenne")
     ax1.legend(loc='upper left')
@@ -102,11 +102,11 @@ def MeanBrother(file, polars=False):
     ax1.set_ylabel('Résistance [ohm]')
     ax2.set_ylabel('Déformation [%]')
     ax3.set_ylabel('Contrainte [MPa]')
-    ax3.set_xlabel('temps [min]')
+    ax3.set_xlabel('temps [s]')
     return fig, axes
 
 
-def BigBrother(file, polars=False):
+def BigBrother(file, polars=False, rolling=None):
 
     # Reading files
     if polars:
@@ -122,6 +122,7 @@ def BigBrother(file, polars=False):
     #     sos = butter(1, 1.0, 'lowpass', fs=fs, output='sos')
     #     # df = df.with_columns(**{col: sosfilt(sos, df[col])})
     #     df[col] = sosfilt(sos, df[col])
+    df = df.rolling(rolling).mean()
 
     time = df["Relative time"]
     ng = len(df.columns)//3
@@ -175,9 +176,9 @@ def BigBrother(file, polars=False):
         print("Plotting gauges  ", end='\r')
         for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
             axcol[0].set_title(f"Rosette {gauge}")
-            axcol[0].plot(time/60, pot, label=rf"$\Delta R_{{{lab}}}$")
-            axcol[1].plot(time/60, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
-            axcol[2].plot(time/60, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
+            axcol[0].plot(time, pot, label=rf"$\Delta R_{{{lab}}}$")
+            axcol[1].plot(time, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
+            axcol[2].plot(time, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
     print()
     axcol[0].set_title("Moyenne")
     axes[0, 0].legend(loc='upper left')
@@ -186,7 +187,10 @@ def BigBrother(file, polars=False):
     axes[0, 0].set_ylabel('Résistance [ohm]')
     axes[1, 0].set_ylabel('Déformation [%]')
     axes[2, 0].set_ylabel('Contrainte [MPa]')
-    axes[2, 0].set_xlabel('temps [min]')
+    axes[2, 0].set_xlabel('temps [s]')
+    for ax in axes[-1, :]:
+        plt.sca(ax)
+        plt.xticks(rotation=60)
     return fig, axes
 
 
@@ -211,4 +215,4 @@ if __name__ == "__main__":
     ampli = -5000e-6
     E = 2.59e9
     nu = 0.35
-    main(polars=True)
+    main(polars=False, rolling=10)
