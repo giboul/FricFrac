@@ -122,7 +122,14 @@ def BigBrother(file, polars=False, rolling=None):
     #     sos = butter(1, 1.0, 'lowpass', fs=fs, output='sos')
     #     # df = df.with_columns(**{col: sosfilt(sos, df[col])})
     #     df[col] = sosfilt(sos, df[col])
-    df = df.rolling(rolling).mean()
+    if rolling is not None:
+        if polars is False:
+            df = df.rolling(rolling).mean()
+        else:
+            df = df.with_columns(**{
+                k: pl.col(k).rolling_mean(window_size=rolling)
+                for k in df.columns
+            })
 
     time = df["Relative time"]
     ng = len(df.columns)//3
@@ -153,7 +160,7 @@ def BigBrother(file, polars=False, rolling=None):
         for alrow in axlines:
             for al in alrow:
                 al.set_xdata(np.full_like(al.get_xdata(), x))
-        fig.suptitle(f"{file.stem}: {x=:.2e}")
+        fig.suptitle(f"{file.stem}: {x=:.2e}  {y=:.2e}")
         fig.canvas.draw()
     fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
 
@@ -189,8 +196,8 @@ def BigBrother(file, polars=False, rolling=None):
     axes[2, 0].set_ylabel('Contrainte [MPa]')
     axes[2, 0].set_xlabel('temps [s]')
     for ax in axes[-1, :]:
-        plt.sca(ax)
-        plt.xticks(rotation=60)
+        ax.set_xticks(ax.get_xticks(), ax.get_xticklabels(), rotation=60)
+
     return fig, axes
 
 
@@ -215,4 +222,4 @@ if __name__ == "__main__":
     ampli = -5000e-6
     E = 2.59e9
     nu = 0.35
-    main(polars=False, rolling=10)
+    main(polars=True, rolling=50)
