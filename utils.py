@@ -183,7 +183,7 @@ def BigBrother(file, polars=False, rolling=None):
         print("Plotting gauges  ", end='\r')
         for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
             axcol[0].set_title(f"Rosette {gauge}")
-            axcol[0].plot(time, pot, label=rf"$\Delta R_{{{lab}}}$")
+            axcol[0].plot(time, pot, label=rf"$\Delta U_{{{lab}}}$")
             axcol[1].plot(time, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
             axcol[2].plot(time, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
     print()
@@ -191,7 +191,7 @@ def BigBrother(file, polars=False, rolling=None):
     axes[0, 0].legend(loc='upper left')
     axes[1, 0].legend(loc='upper left')
     axes[2, 0].legend(loc='upper left')
-    axes[0, 0].set_ylabel('Résistance [ohm]')
+    axes[0, 0].set_ylabel('Tension [V]')
     axes[1, 0].set_ylabel('Déformation [%]')
     axes[2, 0].set_ylabel('Contrainte [MPa]')
     axes[2, 0].set_xlabel('temps [s]')
