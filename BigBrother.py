@@ -1,16 +1,24 @@
 """Module for analyzing fric-frac's results"""
+# Math
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
+# Tables
 import polars as pl
 import pandas as pd
-from scipy.signal import butter, sosfilt
-from numpy.typing import ArrayLike, NDArray
+# Plotting
 from matplotlib import pyplot as plt
+# Signal processing
+from scipy.signal import butter, sosfilt
+# File managing
 from pathlib import Path
 from tkinter import Tk, filedialog
+# Classes
+from typing import NamedTuple, Iterable
 
 
-class Temp:
-    pass
+class Material(NamedTuple):
+    E: float
+    nu: float
 
 
 def rotation_matrix(angles: ArrayLike) -> NDArray:
@@ -46,37 +54,11 @@ def hooke(E: float, nu: float, strains: NDArray) -> NDArray:
     return (2*mu*strains + lambd * trace).T.reshape((3, 3, -1), order='F')
 
 
-def MeanBrother(file, polars=False):
+def stress_strain(mat, tension, ampli):
 
-    if polars:
-        cols = pl.read_csv(file, separator=";", skip_rows=7, n_rows=1).columns
-        df = pl.read_csv(file, separator=";", skip_rows=9, new_columns=cols, infer_schema_length=None)
-    else:
-        cols = pd.read_csv(file, sep=";", skiprows=7, nrows=1).columns
-        df = pd.read_csv(file, sep=";", skiprows=9, names=cols)
+    E, nu = mat
 
-    for col in cols[1:]:
-        fs = 1/np.diff(df['Relative time']).mean()
-        sos = butter(1, 1.0, 'lowpass', fs=fs, output='sos')
-        # df = df.with_columns(**{col: sosfilt(sos, df[col])})
-        df[col] = sosfilt(sos, df[col])
-    time = df["Relative time"]
-    ng = len(df.columns)//3
-
-    mean_gauges = [f"Ch{4*ng+i:0>2}" for i in range(1, 4)]
-    if polars:
-        df = df.with_columns(**{
-            k: pl.sum_horizontal(*[f"Ch{4*g+i:0>2}" for g in range(ng)])/ng
-            for i, k in enumerate(mean_gauges, start=1)
-        })
-    else:
-        for i, k in enumerate(mean_gauges, start=1):
-            cols = [f"Ch{4*g+i:0>2}" for g in range(ng)]
-            df[k] = df[cols].mean(axis=1)
-    print(df)
-
-    data = df[mean_gauges].to_numpy().T
-    e11, e22, e12 = rotation_matrix(np.deg2rad((45, 90, 135))) @ (ampli * data)
+    e11, e22, e12 = rotation_matrix(np.deg2rad((45, 90, 135))) @ (ampli * tension)
     strains_matrix = np.array([
         [e11, e12, 0*e11],
         [e12, e22, 0*e11],
@@ -86,99 +68,125 @@ def MeanBrother(file, polars=False):
     strains = strains_matrix[0, 0], strains_matrix[1, 1], np.abs(2*strains_matrix[0, 1])
     stresses = stresses_matrix[0, 0], stresses_matrix[1, 1], np.abs(stresses_matrix[0, 1])
 
+    return strains, stresses
+
+
+def read_with_polars(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling: int=1, *args, **kwargs):
+
+    df = pl.read_csv(file, *args, **kwargs)
+    if drop is not None:
+        df.drop(*drop)
+    # Mean values over window
+    df = df.with_columns(**{
+        k: pl.col(k).rolling_mean(window_size=rolling)
+        for k in df.columns
+    })
+    # Add averaged group of columns
+    ng = len(df.columns[1:])//ndirs
+    mean_gauges = [f"Averaged{i+1:0>2}" for i in range(ndirs)]
+    df = df.with_columns(**{
+        k: pl.sum_horizontal(*[df.columns[ndirs*g+i] for g in range(ng)])/ng
+        for i, k in enumerate(mean_gauges, start=1)
+    })
+    return df
+
+
+def read_with_pandas(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling: int=1, *args, **kwargs):
+    df: pd.DataFrame = pd.read_csv(file, *args, **kwargs)
+    if drop is not None:
+        df = df.drop(drop)
+    df = df.rolling(rolling).mean()
+    ng = len(df.columns[1:])//ndirs
+    mean_gauges = [f"Averaged{i+1:0>2}" for i in range(ndirs)]
+    for i, k in enumerate(mean_gauges, start=1):
+        cols = [f"Ch{4*g+i:0>2}" for g in range(ng)]
+        df[k] = df[cols].mean(axis=1)
+    return df
+
+
+def MeanBrother(df: pd.DataFrame | pl.DataFrame,
+                mat: Material,
+                ampli: float):
+
+    E, nu = mat
+    time = df["Relative time"]
+    data = df[df.columns[-3:]].to_numpy().T
+
+    strains, stresses = stress_strain(mat, data, ampli)
+
     fig, axes = plt.subplots(nrows=3)
     ax1, ax2, ax3 = axes
-    fig.suptitle(file.stem)
 
     for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
         ax1.plot(time, pot, label=rf"$\Delta R_{{{lab}}}$")
         ax2.plot(time, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
         ax3.plot(time, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
-    print()
+
     ax1.set_title("Moyenne")
     ax1.legend(loc='upper left')
     ax2.legend(loc='upper left')
     ax3.legend(loc='upper left')
-    ax1.set_ylabel('Résistance [ohm]')
+    ax1.set_ylabel('Tension [V]')
     ax2.set_ylabel('Déformation [%]')
     ax3.set_ylabel('Contrainte [MPa]')
     ax3.set_xlabel('temps [s]')
+
+    axlines = [ax.axvline(0., ls='-.', c='gray') for ax in axes]
+    def onclick_GridUpdate(event):
+        x, y = event.xdata, event.ydata
+        for al in axlines:
+            al.set_xdata(np.full_like(al.get_xdata(), x))
+        _name = fig._suptitle
+        if _name is not None:
+            _name = _name.get_text().split(':')[0]
+        else:
+            _name = "Coordinates"
+        fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
+        fig.canvas.draw()
+    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
+
     return fig, axes
 
 
-def BigBrother(file, polars=False, rolling=None):
+def BigBrother(df: pd.DataFrame | pl.DataFrame,
+               mat: Material,
+               ampli: float,
+               ndirs=3):
 
-    # Reading files
-    if polars:
-        cols = pl.read_csv(file, separator=";", skip_rows=7, n_rows=1).columns
-        df = pl.read_csv(file, separator=";", skip_rows=9, new_columns=cols, infer_schema_length=None)
-    else:
-        cols = pd.read_csv(file, sep=";", skiprows=7, nrows=1).columns
-        df = pd.read_csv(file, sep=";", skiprows=9, names=cols)
-
-    # Filtering
-    # for col in cols[1:]:
-    #     fs = 1/np.diff(df['Relative time']).mean()
-    #     sos = butter(1, 1.0, 'lowpass', fs=fs, output='sos')
-    #     # df = df.with_columns(**{col: sosfilt(sos, df[col])})
-    #     df[col] = sosfilt(sos, df[col])
-    if rolling is not None:
-        if polars is False:
-            df = df.rolling(rolling).mean()
-        else:
-            df = df.with_columns(**{
-                k: pl.col(k).rolling_mean(window_size=rolling)
-                for k in df.columns
-            })
-
+    E, nu = mat
     time = df["Relative time"]
-    ng = len(df.columns)//3
-
-    # Adding columns for mean values
-    mean_gauges = [f"Ch{4*ng+i:0>2}" for i in range(1, 4)]
-    if polars:
-        df = df.with_columns(**{
-            k: pl.sum_horizontal(*[f"Ch{4*g+i:0>2}" for g in range(ng)])/ng
-            for i, k in enumerate(mean_gauges, start=1)
-        })
-    else:
-        for i, k in enumerate(mean_gauges, start=1):
-            cols = [f"Ch{4*g+i:0>2}" for g in range(ng)]
-            df[k] = df[cols].mean(axis=1)
-    print(df)
+    df = df[df.columns[1:]]
+    ng = len(df.columns[1:])//ndirs
 
     # Figure definition
     fig, axes = plt.subplots(nrows=3, ncols=ng+1, sharex=True, sharey='row', gridspec_kw=dict(hspace=0, wspace=0))
-    fig.suptitle(file.stem)
     # Vertical lines
     axlines = [
         [ax.axvline(0., ls='-.', c='gray') for ax in axes[i]]
         for i in range(len(axes))
     ]
+
     def onclick_GridUpdate(event):
         x, y = event.xdata, event.ydata
         for alrow in axlines:
             for al in alrow:
                 al.set_xdata(np.full_like(al.get_xdata(), x))
-        fig.suptitle(f"{file.stem}: {x=:.2e}  {y=:.2e}")
+        _name = fig._suptitle
+        if _name is not None:
+            _name = _name.get_text().split(':')[0]
+        else:
+            _name = "Coordinates"
+        fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
         fig.canvas.draw()
     fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
 
     # Plotting each gauge
     for gauge, axcol in enumerate(axes.T):
-        gauges = [f"Ch{4*gauge+1:0>2}",f"Ch{4*gauge+2:0>2}",f"Ch{4*gauge+3:0>2}"]
+        gauges = df.columns[ndirs*gauge:ndirs*gauge+ndirs]
         print(f"Processing gauges {gauges} {gauge}/{ng} ({gauge/ng:.0%})", end='\r')
         data = df[gauges].to_numpy().T
 
-        e11, e22, e12 = rotation_matrix(np.deg2rad((45, 90, 135))) @ (ampli * data)
-        strains_matrix = np.array([
-            [e11, e12, 0*e11],
-            [e12, e22, 0*e11],
-            [0*e11, 0*e11, -nu/(1-nu)*(e11+e22)]
-        ])
-        stresses_matrix = hooke(E, nu, strains_matrix)
-        strains = strains_matrix[0, 0], strains_matrix[1, 1], np.abs(2*strains_matrix[0, 1])
-        stresses = stresses_matrix[0, 0], stresses_matrix[1, 1], np.abs(stresses_matrix[0, 1])
+        strains, stresses = stress_strain(mat, data, ampli)
 
         print("Plotting gauges  ", end='\r')
         for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
@@ -201,25 +209,39 @@ def BigBrother(file, polars=False, rolling=None):
     return fig, axes
 
 
-def main(*args, **kwargs):
-    # Get file paths
+def select_files():
     Tk().withdraw()
     directory = Path(filedialog.askdirectory())
     files = filedialog.askopenfilenames(
         initialdir=directory,
         filetypes=[('Comma Separated Values', '.csv')]
     )
-    files = [directory/f for f in files]
-    # Plot
+    return [directory/f for f in files]
+
+
+
+def main():
+    mat = Material(E=2.59e9, nu=0.35)
+    files = select_files()
+
     with plt.style.context("ggplot"):
         for file in files:
-            BigBrother(file, *args, **kwargs)
-            # MeanBrother(file, *args, **kwargs)
+            # df = read_with_polars(
+            #     file,
+            #     separator=";",
+            #     skip_rows=7,
+            #     skip_rows_after_header=1
+            # )
+            df = read_with_pandas(
+                file,
+                sep=";",
+                skiprows=list(range(7))+[8],
+            )
+            print(df)
+            # BigBrother(df, mat, -5000e-6)
+            MeanBrother(df, mat, -5000e-6)
             plt.show()
 
 
 if __name__ == "__main__":
-    ampli = -5000e-6
-    E = 2.59e9
-    nu = 0.35
-    main(polars=True, rolling=50)
+    main()
