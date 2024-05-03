@@ -81,6 +81,10 @@ def read_with_polars(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling
         k: pl.col(k).rolling_mean(window_size=rolling)
         for k in df.columns
     })
+    df = df.filter(
+        ~pl.all_horizontal(pl.col(pl.Float64, pl.Float64).is_null())
+    )
+    print(df)
     # Add averaged group of columns
     ng = len(df.columns[1:])//ndirs
     mean_gauges = [f"Averaged{i+1:0>2}" for i in range(ndirs)]
@@ -96,6 +100,7 @@ def read_with_pandas(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling
     if drop is not None:
         df = df.drop(drop)
     df = df.rolling(rolling).mean()
+    df = df.dropna()
     ng = len(df.columns[1:])//ndirs
     mean_gauges = [f"Averaged{i+1:0>2}" for i in range(ndirs)]
     for i, k in enumerate(mean_gauges, start=1):
