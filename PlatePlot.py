@@ -102,7 +102,7 @@ if __name__ == "__main__":
     mat = Material(E=2.59e9, nu=0.35)
     ampli = -5000e-6
 
-    # files = select_files()
-    files = ["data/240417/test2_001.csv"]
+    files = select_files()
+    # files = ["data/240417/test2_001.csv"]
 
     plateplot(x_gauges, mat, ampli, files)
