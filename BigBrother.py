@@ -84,7 +84,6 @@ def read_with_polars(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling
     df = df.filter(
         ~pl.all_horizontal(pl.col(pl.Float64, pl.Float64).is_null())
     )
-    print(df)
     # Add averaged group of columns
     ng = len(df.columns[1:])//ndirs
     mean_gauges = [f"Averaged{i+1:0>2}" for i in range(ndirs)]
@@ -92,6 +91,7 @@ def read_with_polars(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling
         k: pl.sum_horizontal(*[df.columns[ndirs*g+i] for g in range(ng)])/ng
         for i, k in enumerate(mean_gauges, start=1)
     })
+    print(df)
     return df
 
 
@@ -106,6 +106,7 @@ def read_with_pandas(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling
     for i, k in enumerate(mean_gauges, start=1):
         cols = [f"Ch{4*g+i:0>2}" for g in range(ng)]
         df[k] = df[cols].mean(axis=1)
+    print(df)
     return df
 
 
