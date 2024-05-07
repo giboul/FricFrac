@@ -1,4 +1,6 @@
 from matplotlib import pyplot as plt
+import matplotlib
+from pathlib import Path
 from BigBrother import (
     read_with_pandas,
     read_with_polars,
@@ -7,10 +9,12 @@ from BigBrother import (
     Material
 )
 import numpy as np
+matplotlib.rcParams['keymap.back'].remove('left')
+matplotlib.rcParams['keymap.forward'].remove('right')
 
 
 keys = dict(index=0, step=1)
-def update_keys(event, redraw=False):
+def update_keys(event, redraw=False) -> bool:
     if event.key == 'right':
         keys["index"] +=keys['step']
         redraw = True
@@ -25,21 +29,22 @@ def update_keys(event, redraw=False):
         keys['step'] += 1000
     elif event.key == 'pagedown':
         keys['step'] -= 1000
-    else:
-        print(f"WARNING: key '{event.key}' not implemented")
     return redraw
 
 
-def plateplot(x_gauges, mat, ampli, files):
+def plateplot(x_gauges, mat, ampli, files, polars=False):
     for file in files:
-        df = read_with_pandas(file, sep=";", skiprows=list(range(7))+[8], rolling=100).to_numpy().T
-        # df = read_with_polars(file, separator=";", skip_rows=7, skip_rows_after_header=1, rolling=100).to_numpy().T
+        if polars is True:
+            df = read_with_polars(file, separator=";", skip_rows=7, skip_rows_after_header=1, rolling=100).to_numpy().T
+        else:
+            df = read_with_pandas(file, sep=";", skiprows=list(range(7))+[8], rolling=1).to_numpy().T
 
         fig, (ax, axBB) = plt.subplots(nrows=2)
+        fig.canvas.manager.set_window_title(Path(file).stem)
         title = (
             "Index: {}, Step: {}\n"
             r"advance $\rightarrow$       rewind $\leftarrow$""\n"
-            r"step+=1 $\uparrow$          step-=1 $\downarrow$""\n"
+            r"step+=10 $\uparrow$          step-=10 $\downarrow$""\n"
             r"step += 1000 $\Uparrow$      step-=1000$\Downarrow$"
         )
 
@@ -49,7 +54,7 @@ def plateplot(x_gauges, mat, ampli, files):
         for gauge, x in enumerate(x_gauges):
             print(f"Treating gauge {gauge+1}/{len(x_gauges)}", end="\r")
             strains, stresses = stress_strain(mat, df[3*gauge+1:3*gauge+4], ampli)
-            gauge_data.append(stresses)
+            gauge_data.append(np.array(stresses)/1e6)
         gauge_data = np.array(gauge_data)
         print(f"\nDone")
 
@@ -72,7 +77,7 @@ def plateplot(x_gauges, mat, ampli, files):
 
         ax.set_title(title.format(keys['index'], keys['step']))
         ax.set_xlabel("Position on plate")
-        ax.set_ylabel(rf"$\sigma(t = {time[keys['index']]:.2e} s)$")
+        ax.set_ylabel(rf"$\sigma(t = {time[keys['index']]:.2e} s)$ [MPa]")
         ax.dataLim.y0 = gauge_data.min()
         ax.dataLim.y1 = gauge_data.max()
         # ax.legend(loc="upper right")
@@ -88,12 +93,12 @@ def plateplot(x_gauges, mat, ampli, files):
             # ax.relim()
             # ax.autoscale_view()
         def onkey(event):
-            if update_keys(event):
+            if update_keys(event) is True:
                 move_vlines()
             ax.set_title(title.format(keys['index'], keys['step']))
             fig.canvas.draw()
         def onclick(event):
-            if event.dblclick:
+            if event.dblclick is True:
                 keys["index"] = np.abs(time-event.xdata).argmin()
                 move_vlines()
                 ax.set_title(title.format(keys['index'], keys['step']))

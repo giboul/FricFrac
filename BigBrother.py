@@ -243,6 +243,7 @@ def main():
                 file,
                 sep=";",
                 skiprows=list(range(7))+[8],
+                rolling=100
             )
             print(df)
             # BigBrother(df, mat, -5000e-6)
