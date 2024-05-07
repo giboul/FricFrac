@@ -32,12 +32,12 @@ def update_keys(event, redraw=False) -> bool:
     return redraw
 
 
-def plateplot(x_gauges, mat, ampli, files, polars=False):
+def plateplot(x_gauges, mat, ampli, files, rolling=1, polars=False):
     for file in files:
         if polars is True:
-            df = read_with_polars(file, separator=";", skip_rows=7, skip_rows_after_header=1, rolling=100).to_numpy().T
+            df = read_with_polars(file, separator=";", skip_rows=7, skip_rows_after_header=1, rolling=rolling).to_numpy().T
         else:
-            df = read_with_pandas(file, sep=";", skiprows=list(range(7))+[8], rolling=1).to_numpy().T
+            df = read_with_pandas(file, sep=";", skiprows=list(range(7))+[8], rolling=rolling).to_numpy().T
 
         fig, (ax, axBB) = plt.subplots(nrows=2)
         fig.canvas.manager.set_window_title(Path(file).stem)
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     mat = Material(E=2.59e9, nu=0.35)
     ampli = -5000e-6
 
-    files = select_files()
-    # files = ["data/240417/test2_001.csv"]
+    # files = select_files()
+    files = ["data/240417/test2_000.csv"]
 
-    plateplot(x_gauges, mat, ampli, files)
+    plateplot(x_gauges, mat, ampli, files, rolling=500, polars=True)
