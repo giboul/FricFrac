@@ -10,13 +10,13 @@ import numpy as np
 
 
 keys = dict(index=0, step=1)
-def update_keys(event):
+def update_keys(event, redraw=False):
     if event.key == 'right':
         keys["index"] +=keys['step']
-        return True
+        redraw = True
     elif event.key == 'left':
         keys["index"] -= keys['step']
-        return True
+        redraw = True
     elif event.key == 'up':
         keys['step'] += 10
     elif event.key == 'down':
@@ -27,7 +27,7 @@ def update_keys(event):
         keys['step'] -= 1000
     else:
         print(f"WARNING: key '{event.key}' not implemented")
-    return False
+    return redraw
 
 
 def plateplot(x_gauges, mat, ampli, files):
@@ -40,7 +40,7 @@ def plateplot(x_gauges, mat, ampli, files):
             "Index: {}, Step: {}\n"
             r"advance $\rightarrow$       rewind $\leftarrow$""\n"
             r"step+=1 $\uparrow$          step-=1 $\downarrow$""\n"
-            r"step += 100 $\Uparrow$      step-=100$\Downarrow$"
+            r"step += 1000 $\Uparrow$      step-=1000$\Downarrow$"
         )
 
         # Reading files
