@@ -138,17 +138,18 @@ def MeanBrother(df: pd.DataFrame | pl.DataFrame,
 
     axlines = [ax.axvline(0., ls='-.', c='gray') for ax in axes]
     def onclick_GridUpdate(event):
-        x, y = event.xdata, event.ydata
-        for al in axlines:
-            al.set_xdata(np.full_like(al.get_xdata(), x))
-        _name = fig._suptitle
-        if _name is not None:
-            _name = _name.get_text().split(':')[0]
-        else:
-            _name = "Coordinates"
-        fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
-        fig.canvas.draw()
-    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
+        if event.dblclick:
+            x, y = event.xdata, event.ydata
+            for al in axlines:
+                al.set_xdata(np.full_like(al.get_xdata(), x))
+            _name = fig._suptitle
+            if _name is not None:
+                _name = _name.get_text().split(':')[0]
+            else:
+                _name = "Coordinates"
+            fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
+            fig.canvas.draw()
+    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)  # TODO double click
 
     return fig, axes
 
@@ -173,9 +174,10 @@ def BigBrother(df: pd.DataFrame | pl.DataFrame,
 
     def onclick_GridUpdate(event):
         x, y = event.xdata, event.ydata
-        for alrow in axlines:
-            for al in alrow:
-                al.set_xdata(np.full_like(al.get_xdata(), x))
+        if event.dblclick:
+            for alrow in axlines:
+                for al in alrow:
+                    al.set_xdata(np.full_like(al.get_xdata(), x))
         _name = fig._suptitle
         if _name is not None:
             _name = _name.get_text().split(':')[0]
@@ -183,7 +185,7 @@ def BigBrother(df: pd.DataFrame | pl.DataFrame,
             _name = "Coordinates"
         fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
         fig.canvas.draw()
-    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
+    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)  # TODO double click
 
     # Plotting each gauge
     for gauge, axcol in enumerate(axes.T):

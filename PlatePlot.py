@@ -78,19 +78,28 @@ def plateplot(x_gauges, mat, ampli, files):
         # ax.legend(loc="upper right")
 
         # Add key events
+        def move_vlines():
+            keys["index"] = max(0, min(keys["index"], time.size-1))
+            for i, direction in enumerate(("Parallel", "Normal", "Shear")):
+                data = [g[i][keys["index"]] for g in gauge_data]
+                points[i].set_data(x_gauges, data)
+            vline.set_xdata(np.full_like(vline.get_xdata(), time[keys["index"]]))
+            ax.set_ylabel(rf"$\sigma(t = {time[keys['index']]:.2e} s)$")
+            # ax.relim()
+            # ax.autoscale_view()
         def onkey(event):
             if update_keys(event):
-                keys["index"] = max(0, min(keys["index"], time.size-1))
-                for i, direction in enumerate(("Parallel", "Normal", "Shear")):
-                    data = [g[i][keys["index"]] for g in gauge_data]
-                    points[i].set_data(x_gauges, data)
-                vline.set_xdata(np.full_like(vline.get_xdata(), time[keys["index"]]))
-                ax.set_ylabel(rf"$\sigma(t = {time[keys['index']]:.2e} s)$")
-                # ax.relim()
-                # ax.autoscale_view()
+                move_vlines()
             ax.set_title(title.format(keys['index'], keys['step']))
             fig.canvas.draw()
+        def onclick(event):
+            if event.dblclick:
+                keys["index"] = np.abs(time-event.xdata).argmin()
+                move_vlines()
+                ax.set_title(title.format(keys['index'], keys['step']))
+                fig.canvas.draw()
         fig.canvas.mpl_connect('key_press_event', onkey)
+        fig.canvas.mpl_connect('button_press_event', onclick)
 
         plt.tight_layout()
         plt.show()
@@ -102,7 +111,7 @@ if __name__ == "__main__":
     mat = Material(E=2.59e9, nu=0.35)
     ampli = -5000e-6
 
-    files = select_files()
-    # files = ["data/240417/test2_001.csv"]
+    # files = select_files()
+    files = ["data/240417/test2_001.csv"]
 
     plateplot(x_gauges, mat, ampli, files)
