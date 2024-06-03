@@ -40,6 +40,7 @@ def plateplot(x_gauges, mat, ampli, files, rolling=1, polars=False):
             df = read_with_pandas(file, sep=";", skiprows=list(range(7))+[8], rolling=rolling).to_numpy().T
 
         fig, (ax, axBB) = plt.subplots(nrows=2)
+        ax.set_xlim((0, 250))
         fig.canvas.manager.set_window_title(Path(file).stem)
         title = (
             "Index: {}, Step: {}\n"
@@ -112,11 +113,11 @@ def plateplot(x_gauges, mat, ampli, files, rolling=1, polars=False):
 
 if __name__ == "__main__":
     # Définition du problème
-    x_gauges = np.cumsum((20, 60, 60, 60, 20))
+    x_gauges = np.array((2, 50, 123, 200, 248))
     mat = Material(E=2.59e9, nu=0.35)
     ampli = -5000e-6
 
-    # files = select_files()
-    files = ["data/240417/test2_000.csv"]
+    files = select_files()
+    # files = ["data/240417/test2_000.csv"]
 
-    plateplot(x_gauges, mat, ampli, files, rolling=500, polars=True)
+    plateplot(x_gauges, mat, ampli, files, rolling=200, polars=True)
