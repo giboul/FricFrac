@@ -18,7 +18,7 @@ The code is intended for the following setup:
 | 0.0049975     | -0.20223  | -2.0 | -2.0 | … | -0.367605 | -2.0 | 0.000502 |
 | 0.0049995     | -0.3772   | -2.0 | -2.0 | … | -0.354459 | -2.0 | -0.006029|
 
-<img src="FricFrac in person.jpeg">
+<img src="images/FricFrac in person.jpeg">
 
 ## Implemented functions
 
@@ -39,17 +39,17 @@ The `rotation_matrix` function is implemented for any orientations but it is sim
 
 ### `BigBrother` looks at everything
 
-<img src="BigBrother test.png">
+<img src="images/BigBrother test.png">
 
 ### `MeanBrother` looks at the averaged values over all rosettes
 
-<img src="MeanBrother test.png">
+<img src="images/MeanBrother test.png">
 
 ### `PlatePlot` looks at the averaged values over all rosettes
 
 Here is a gif to simulate an interactive plot
 
-<img src="PlatePlot.gif">
+<img src="images/PlatePlot.gif">
 
 ## The `BogPolarBrother`
 
