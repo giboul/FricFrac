@@ -22,11 +22,11 @@ The code is intended for the following setup:
 
 ## Implemented functions
 
-> `read()` (for reading the `csv` files)
-> `lowfilter()` for reducing noise
-> `straindf()` for computing the strains from the signal
-> `stressdf()` for computing the stresses from the strains
-> `select_files()` is a simple GUI tool for choosing the files to work with
+> - `read()` (for reading the `csv` files)
+> - `lowfilter()` for reducing noise
+> - `straindf()` for computing the strains from the signal
+> - `stressdf()` for computing the stresses from the strains
+> - `select_files()` is a simple GUI tool for choosing the files to work with
 
 In order to pass from the rosette signals to strains, an amplification factor and a rotation matrix (3x3) are used.
 
