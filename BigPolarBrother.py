@@ -483,7 +483,7 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
         for file in files:
 
             tensiondf = read(file, separator=";", skip_rows=7, skip_rows_after_header=1)
-            tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
+            # tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
 
             if False:
                 gauge_channels = None
