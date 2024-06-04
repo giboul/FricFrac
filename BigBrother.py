@@ -1,38 +1,73 @@
 """Module for analyzing fric-frac's results"""
-# Math
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
-# Tables
-import polars as pl
 import pandas as pd
-# Plotting
 from matplotlib import pyplot as plt
-# Signal processing
-from scipy.signal import butter, sosfilt
-# File managing
+from typing import List
+from numpy.typing import ArrayLike, NDArray
+from tkinter import Tk, filedialog, messagebox
 from pathlib import Path
-from tkinter import Tk, filedialog
-# Classes
-from typing import NamedTuple, Iterable
-
-
-class Material(NamedTuple):
-    E: float
-    nu: float
 
 
 def rotation_matrix(angles: ArrayLike) -> NDArray:
-    """Rotate stress field by `theta` degrees to be aligned to fric-frac
-    s = s_xx*cos(theta)² + s_yy*sin(theta)² + s_xy*sin(2theta)"""
-    a, b, c = angles
+    """
+    Rotate stress field by `theta` degrees to be aligned to fric-frac.
+    s = s_xx*cos(theta)² + s_yy*sin(theta)² + s_xy*sin(2theta)
+
+    Example of a deformation gauge pointed upwards:
+
+    135°  90°  45°
+    O     O     O
+     \    |    /    => angles = (45, 90, 135)
+      \   |   /
+       \  |  / 
+        \ | /
+          O
+
+    Parameters
+    ----------
+    angles: ArrayLike
+        The 3 angles of the deformation wires.
+
+    Return
+    ------
+    NDArray
+        The rotation matrix (3x3) to apply on stresses of strains.
+    """
+    a, b, c = np.deg2rad(angles)
     return np.array([
-        [np.sin(b)*np.sin(c)/(np.sin(a-b)*np.sin(a-c)), -np.sin(a)*np.sin(c)/(np.sin(a-b)*np.sin(b-c)), np.sin(a)*np.sin(b)/(np.sin(a-c)*np.sin(b-c))],
-        [np.cos(b)*np.cos(c)/(np.sin(a-b)*np.sin(a-c)), -np.cos(a)*np.cos(c)/(np.sin(a-b)*np.sin(b-c)), np.cos(a)*np.cos(b)/(np.sin(a-c)*np.sin(b-c))],
-        [-np.sin(b+c)/(np.sin(a-b)*np.sin(a-c))/2, np.sin(a+c)/(np.sin(a-b)*np.sin(b-c))/2, -np.sin(a+b)/(np.sin(a-c)*np.sin(b-c))/2],
+        [np.sin(b)*np.sin(c)/(np.sin(a-b)*np.sin(a-c)),
+         -np.sin(a)*np.sin(c)/(np.sin(a-b)*np.sin(b-c)),
+         np.sin(a)*np.sin(b)/(np.sin(a-c)*np.sin(b-c))],
+        [np.cos(b)*np.cos(c)/(np.sin(a-b)*np.sin(a-c)),
+         -np.cos(a)*np.cos(c)/(np.sin(a-b)*np.sin(b-c)),
+         np.cos(a)*np.cos(b)/(np.sin(a-c)*np.sin(b-c))],
+        [-np.sin(b+c)/(np.sin(a-b)*np.sin(a-c))/2,
+         np.sin(a+c)/(np.sin(a-b)*np.sin(b-c))/2,
+         -np.sin(a+b)/(np.sin(a-c)*np.sin(b-c))/2],
     ])
 
 
 def plane_stress_matrix(E: float, nu: float) -> NDArray:
+    """
+    Create the plane stress matrix for linear elasticity.
+    ┌    ┐             ┌              ┐ ┌    ┐
+    |s_11|             | 1   nu   0   | |e_11|
+    |s_22| = E/(1-nu²).| nu  1    0   |.|e_22|
+    |t_12|             | 0   0  (1-nu)| |e_12|
+    └    ┘             └              ┘ └    ┘
+
+    Parameters
+    ----------
+    E: float
+        Young's modulus.
+    nu: float
+        Poisson ration.
+    
+    Return
+    ------
+    NDArray
+        The plane stress matrix.
+    """
     return E / (1-nu**2) * np.array([
         [1, nu, 0],
         [nu, 1, 0],
@@ -40,215 +75,366 @@ def plane_stress_matrix(E: float, nu: float) -> NDArray:
     ])
 
 
-def hooke(E: float, nu: float, strains: NDArray) -> NDArray:
-    mu = E/(2*(1+nu))
-    lambd = E*nu/((1+nu)*(1-2*nu))
-    trace = np.trace(strains)
-    strains = strains.T.reshape((-1, 3, 3), order='F')
-    z = np.zeros(strains.shape[0])
-    trace = np.array([
-        [trace, z, z],
-        [z, trace, z],
-        [z, z, trace]
-    ]).T.reshape((-1, 3, 3), order='F')
-    return (2*mu*strains + lambd * trace).T.reshape((3, 3, -1), order='F')
+def _usual_gauge_channels(columns: List[str]) -> List[str]:
+    """
+    Just to make my life easier.
+    Removes all channels whose id is a multiple of 4.
+    Then groups the colums by groups of 3.
+
+    Parameters
+    ----------
+    columns: List[str]
+        The columns to treat.
+
+    Return
+    ------
+    List[List[str]]
+        The true columns.
+    """
+    # Filter out multiples of 4
+    gauge_channels = [g for g in columns[1:] if g.removeprefix("Ch").isdecimal() and int(g.removeprefix("Ch")) % 4 != 0]
+    # Group by triads
+    gauge_channels = [gauge_channels[3*i:3*i+3] for i, _ in enumerate(gauge_channels[::3])]
+
+    return gauge_channels
 
 
-def stress_strain(mat, tension, ampli):
+def read(file: str, gauge_names: List[List[str]] = None, rolling_window: int = 1, *csv_args, **csv_kwargs):
+    """
+    Read a csv file containing groups of gauge results.
+    The file should be similar to this (with the time column FIRST):
 
-    E, nu = mat
+    ┌───────────────┬───────────┬──────┬──────┬───┬───────────┬──────┬───────────┐
+    │ Relative time ┆ Ch01      ┆ Ch02 ┆ Ch03 ┆ … ┆ Ch18      ┆ Ch19 ┆ Ch20      │
+    │ ---           ┆ ---       ┆ ---  ┆ ---  ┆ … ┆ ---       ┆ ---  ┆ ---       │
+    │ f64           ┆ f64       ┆ f64  ┆ f64  ┆ … ┆ f64       ┆ f64  ┆ f64       │
+    ╞═══════════════╪═══════════╪══════╪══════╪═══╪═══════════╪══════╪═══════════╡
+    │ -0.005        ┆ -0.177943 ┆ -2.0 ┆ -2.0 ┆ … ┆ -0.367605 ┆ -2.0 ┆ 0.017335  │
+    │ -0.004998     ┆ -0.263445 ┆ -2.0 ┆ -2.0 ┆ … ┆ -0.43433  ┆ -2.0 ┆ 0.013566  │
+    │ …             ┆ …         ┆ …    ┆ …    ┆ … ┆ …         ┆ …    ┆ …         │
+    │ 0.0049975     ┆ -0.20223  ┆ -2.0 ┆ -2.0 ┆ … ┆ -0.367605 ┆ -2.0 ┆ 0.000502  │
+    │ 0.0049995     ┆ -0.3772   ┆ -2.0 ┆ -2.0 ┆ … ┆ -0.354459 ┆ -2.0 ┆ -0.006029 │
+    └───────────────┴───────────┴──────┴──────┴───┴───────────┴──────┴───────────┘
 
-    e11, e22, e12 = rotation_matrix(np.deg2rad((45, 90, 135))) @ (ampli * tension)
-    strains_matrix = np.array([
-        [e11, e12, 0*e11],
-        [e12, e22, 0*e11],
-        [0*e11, 0*e11, -nu/(1-nu)*(e11+e22)]
-    ])
-    stresses_matrix = hooke(E, nu, strains_matrix)
-    strains = strains_matrix[0, 0], strains_matrix[1, 1], np.abs(2*strains_matrix[0, 1])
-    stresses = stresses_matrix[0, 0], stresses_matrix[1, 1], np.abs(stresses_matrix[0, 1])
+    Parameters
+    ----------
+    file: str | Path
+        The name of the file to read.
+    gauge_names: List[List[str]]
+        The name of the columns to use, grouped by gauge.
+    rolling_window: int
+        Average values over rolling window.
+    *csv_args
+        Passed to pandas.read_csv.
+    **csv_kwargs
+        Pased to pandas.read_csv.
 
-    return strains, stresses
+    Return
+    ------
+    pd.DataFrame
+        The DataFrame with the tension measures for each gauge channel.
+    """
 
+    df = pd.read_csv(file, *csv_args, **csv_kwargs)
 
-def read_with_polars(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling: int=1, *args, **kwargs):
+    if gauge_names is None:
+        gauge_names = _usual_gauge_channels(df.columns)
 
-    df = pl.read_csv(file, *args, **kwargs)
-    if drop is not None:
-        df.drop(*drop)
-    # Mean values over window
-    df = df.with_columns(**{
-        k: pl.col(k).rolling_mean(window_size=rolling)
-        for k in df.columns
-    })
-    df = df.filter(
-        ~pl.all_horizontal(pl.col(pl.Float64, pl.Float64).is_null())
-    )
-    # Add averaged group of columns
-    ng = len(df.columns[1:])//ndirs
-    mean_gauges = [f"Averaged{i+1:0>2}" for i in range(ndirs)]
-    df = df.with_columns(**{
-        k: pl.sum_horizontal(*[df.columns[ndirs*g+i] for g in range(ng)])/ng
-        for i, k in enumerate(mean_gauges, start=1)
-    })
-    print(df)
-    return df
+    flattened_gauge_names = [gn for gnames in gauge_names for gn in gnames]
+    df = df[[df.columns[0]] + flattened_gauge_names]
 
+    if not all(len(gns) == 3 for gns in gauge_names):
+        raise ValueError(
+            "Not all gauges have the same number of columns.\n"f"{gauge_names = }")
 
-def read_with_pandas(file: Path, ndirs: int=3, drop: Iterable[str]=None, rolling: int=1, *args, **kwargs):
-    df: pd.DataFrame = pd.read_csv(file, *args, **kwargs)
-    if drop is not None:
-        df = df.drop(drop)
-    df = df.rolling(rolling).mean()
+    df = df.rolling(rolling_window).mean()
     df = df.dropna()
-    ng = len(df.columns[1:])//ndirs
-    mean_gauges = [f"Averaged{i+1:0>2}" for i in range(ndirs)]
-    for i, k in enumerate(mean_gauges, start=1):
-        cols = [f"Ch{4*g+i:0>2}" for g in range(ng)]
-        df[k] = df[cols].mean(axis=1)
-    print(df)
+
     return df
 
 
-def MeanBrother(df: pd.DataFrame | pl.DataFrame,
-                mat: Material,
-                ampli: float):
+def straindf(tensions: pd.DataFrame, angles: ArrayLike, amplification: float, gauge_channels: List[List[str]] = None, time_col: str = "Relative time") -> pd.DataFrame:
+    """
+    Convert the tension measures into strains through the amplification factor and the rotation matrix.
+    
+    Parameters
+    ----------
+    tensions: pd.DataFrame
+        The DataFrame contaning the tension for each channel.
+    angles: ArrayLike
+        The angles in which the gauges are oriented.
+    amplification: float
+        The amplification factor (`volt_to_epsilon`).
+    gauge_channels: List[List[str]]
+        To specify non-standard columns.
+    time_col: str = "Relative time"
+        To specify the the time column.
+    
+    Return
+    ------
+    pd.DataFrame
+        The dataframe containing the strain for each rosette, in each direction (xx, yy, xy).
+    """
+    strains = pd.DataFrame(tensions[time_col])
+    rot_mat = rotation_matrix(angles)
 
-    E, nu = mat
-    time = df["Relative time"]
-    data = df[df.columns[-3:]].to_numpy().T
+    if gauge_channels is None:
+        gauge_channels = _usual_gauge_channels(tensions.columns)
 
-    strains, stresses = stress_strain(mat, data, ampli)
+    for channels in gauge_channels:
+        elongations = tensions[channels] * amplification
+        strains[channels] = np.einsum('ij, kj -> ki', rot_mat, elongations)
 
-    fig, axes = plt.subplots(nrows=3)
-    ax1, ax2, ax3 = axes
-
-    for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
-        ax1.plot(time, pot, label=rf"$\Delta R_{{{lab}}}$")
-        ax2.plot(time, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
-        ax3.plot(time, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
-
-    ax1.set_title("Moyenne")
-    ax1.legend(loc='upper left')
-    ax2.legend(loc='upper left')
-    ax3.legend(loc='upper left')
-    ax1.set_ylabel('Tension [V]')
-    ax2.set_ylabel('Déformation [%]')
-    ax3.set_ylabel('Contrainte [MPa]')
-    ax3.set_xlabel('temps [s]')
-
-    axlines = [ax.axvline(0., ls='-.', c='gray') for ax in axes]
-    def onclick_GridUpdate(event):
-        if event.dblclick:
-            x, y = event.xdata, event.ydata
-            for al in axlines:
-                al.set_xdata(np.full_like(al.get_xdata(), x))
-            _name = fig._suptitle
-            if _name is not None:
-                _name = _name.get_text().split(':')[0]
-            else:
-                _name = "Coordinates"
-            fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
-            fig.canvas.draw()
-    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)  # TODO double click
-
-    return fig, axes
+    return strains
 
 
-def BigBrother(df: pd.DataFrame | pl.DataFrame,
-               mat: Material,
-               ampli: float,
-               ndirs=3):
+def stressdf(strains: pd.DataFrame, E: float, nu: float, time_col: str = "Relative time") -> pd.DataFrame:
+    """
+    Convert the strains into stresses through Hooke's law in plane stress.
+    
+    Parameters
+    ----------
+    strains: pd.DataFrame
+        The DataFrame contaning the strains for each gauge, for each direction.
+    E: float
+        Young's modulus.
+    nu: float
+        Poisson ration.
+    time_col: str = "Relative time"
+        To specify the the time column
+    
+    Return
+    ------
+    pd.DataFrame
+        The dataframe containing the stresses for each rosette, in each direction (xx, yy, xy)
+    """
+    stresses = pd.DataFrame(strains[time_col])
+    hooke = plane_stress_matrix(E, nu)
 
-    E, nu = mat
-    time = df["Relative time"]
-    df = df[df.columns[1:]]
-    ng = len(df.columns[1:])//ndirs
+    gauge_channels = [strains.columns[3*i+1:3*(i+1)+1] for i, _ in enumerate(strains.columns[1::3])]
 
-    # Figure definition
-    fig, axes = plt.subplots(nrows=3, ncols=ng+1, sharex=True, sharey='row', gridspec_kw=dict(hspace=0, wspace=0))
+    for channels in gauge_channels:
+        stresses[channels] = np.einsum('ij,kj->ki', hooke, strains[channels])
+
+    return stresses
+
+
+def BigBrother(strains: pd.DataFrame, stresses: pd.DataFrame, timecol: str = None):
+    """
+    Plot stresses and strains for all gauges and their averaged values.
+
+    Parameters
+    ----------
+    strains: pd.DataFrame
+        The DataFrame with the first columns being the time and the rest being the strains.
+    stresses: pd.DataFrame
+        The DataFrame with the first columns being the time and the rest being the stresses.
+    timecol: str = None
+        The name of the time column if it is not first
+
+    Return
+    ------
+    matplotlib.Figure
+    Tuple[matplotlib.Axes]
+
+    Plot
+    ----
+    The strains and stresses grouped by gauge
+    """
+
+    strains = strains.copy()
+    stresses = stresses.copy()
+
+    if timecol is None:
+        timecol = strains.columns[0]
+    time = strains.pop(timecol)
+    stresses.pop(timecol)
+
+    gauge_columns = [strains.columns[3*i:3*(i+1)] for i, _ in enumerate(strains.columns[::3])]
+
+    fig, axes = plt.subplots(nrows=2, ncols=len(gauge_columns), sharex=True,
+                             sharey='row', gridspec_kw=dict(hspace=0, wspace=0))
     # Vertical lines
-    axlines = [
-        [ax.axvline(0., ls='-.', c='gray') for ax in axes[i]]
-        for i in range(len(axes))
-    ]
+    axlines = [[ax.axvline(0., ls='-.', c='gray') for ax in axe] for axe in axes]
 
     def onclick_GridUpdate(event):
+        """Function to redraw figure on click events"""
+        # Retrieve clicked coordinates
         x, y = event.xdata, event.ydata
         if event.dblclick:
+            # Update all vertical lines
             for alrow in axlines:
                 for al in alrow:
                     al.set_xdata(np.full_like(al.get_xdata(), x))
+        # Update title to include cliked coordinates
         _name = fig._suptitle
         if _name is not None:
             _name = _name.get_text().split(':')[0]
         else:
             _name = "Coordinates"
         fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
+        # Redraw figure
         fig.canvas.draw()
-    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)  # TODO double click
+    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
 
+    directions = (r"//", r"\perp", "xy")
     # Plotting each gauge
-    for gauge, axcol in enumerate(axes.T):
-        gauges = df.columns[ndirs*gauge:ndirs*gauge+ndirs]
-        print(f"Processing gauges {gauges} {gauge}/{ng} ({gauge/ng:.0%})", end='\r')
-        data = df[gauges].to_numpy().T
+    for gauge, (cols, axcol) in enumerate(zip(gauge_columns, axes.T), start=1):
 
-        strains, stresses = stress_strain(mat, data, ampli)
+        gauge_strains = strains[cols].to_numpy().T
+        gauge_stresses = stresses[cols].to_numpy().T
 
-        print("Plotting gauges  ", end='\r')
-        for lab, labb, pot, strain, stress in zip((1, 2, 3), (11, 22, 12), data, strains, stresses):
+        for lab, strain, stress in zip(directions, gauge_strains, gauge_stresses):
             axcol[0].set_title(f"Rosette {gauge}")
-            axcol[0].plot(time, pot, label=rf"$\Delta U_{{{lab}}}$")
-            axcol[1].plot(time, strain*100, label=rf"$\varepsilon_{{{labb}}}$")
-            axcol[2].plot(time, stress/1e6, label=rf"$\sigma_{{{labb}}}$")
-    print()
-    axcol[0].set_title("Moyenne")
+            axcol[0].plot(time, strain*100, label=rf"$\varepsilon_{{{lab}}}$")
+            axcol[1].plot(time, stress/1e6, label=rf"$\sigma_{{{lab}}}$")
+
     axes[0, 0].legend(loc='upper left')
     axes[1, 0].legend(loc='upper left')
-    axes[2, 0].legend(loc='upper left')
-    axes[0, 0].set_ylabel('Tension [V]')
-    axes[1, 0].set_ylabel('Déformation [%]')
-    axes[2, 0].set_ylabel('Contrainte [MPa]')
-    axes[2, 0].set_xlabel('temps [s]')
+    axes[0, 0].set_ylabel('Déformation [%]')
+    axes[1, 0].set_ylabel('Contrainte [MPa]')
+    axes[1, 0].set_xlabel('temps [s]')
+    # Rotate ticks by 60°
     for ax in axes[-1, :]:
         ax.set_xticks(ax.get_xticks(), ax.get_xticklabels(), rotation=60)
 
     return fig, axes
 
 
+def MeanBrother(strains: pd.DataFrame, stresses: pd.DataFrame, timecol: str = None):
+    """
+    Plot stresses and strains for averaging all rosettes, each gauge.
+
+    Parameters
+    ----------
+    strains: pd.DataFrame
+        The DataFrame with the first columns being the time and the rest being the strains.
+    stresses: pd.DataFrame
+        The DataFrame with the first columns being the time and the rest being the stresses.
+    timecol: str = None
+        The name of the time column if it is not first
+
+    Return
+    ------
+    matplotlib.Figure
+    Tuple[matplotlib.Axes]
+
+    Plot
+    ----
+    The averged strains and stresses over all gauges
+    """
+
+    strains = strains.copy()
+    stresses = stresses.copy()
+
+    if timecol is None:
+        timecol = strains.columns[0]
+    time = strains.pop(timecol)
+    stresses.pop(timecol)
+
+    gauge_columns = [strains.columns[3*i:3*(i+1)] for i, _ in enumerate(strains.columns[::3])]
+    gauge_columns = [list(cols) for cols in zip(*gauge_columns)]
+
+    for i, cols in enumerate(gauge_columns):
+        strains[f"Av0{i}"] = strains[cols].mean(axis=1)
+        stresses[f"Av0{i}"] = stresses[cols].mean(axis=1)
+
+    gauge_columns = [f"Av0{i}" for i in range(3)]
+
+    fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True,
+                                   sharey='row', gridspec_kw=dict(hspace=0, wspace=0))
+    # Vertical lines
+    axlines = [ax.axvline(0., ls='-.', c='gray') for ax in (ax1, ax2)]
+
+    def onclick_GridUpdate(event):
+        """Function to redraw figure on click events"""
+        # Retrieve clicked coordinates
+        x, y = event.xdata, event.ydata
+        if event.dblclick:
+            # Update all vertical lines
+            for axl in axlines:
+                axl.set_xdata(np.full_like(axl.get_xdata(), x))
+        # Update title to include cliked coordinates
+        _name = fig._suptitle
+        if _name is not None:
+            _name = _name.get_text().split(':')[0]
+        else:
+            _name = "Coordinates"
+        fig.suptitle(f"{_name}: {x=:.2e}  {y=:.2e}")
+        # Redraw figure
+        fig.canvas.draw()
+    fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
+
+    directions = ("//", r"\perp", "xy")
+    strains = strains[gauge_columns].to_numpy().T
+    stresses = stresses[gauge_columns].to_numpy().T
+    for lab, strain, stress in zip(directions, strains, stresses):
+        ax1.plot(time, strain*100, label=rf"$\varepsilon_{{{lab}}}$")
+        ax2.plot(time, stress/1e6, label=rf"$\sigma_{{{lab}}}$")
+
+    ax1.legend(loc='upper left')
+    ax2.legend(loc='upper left')
+    ax1.set_ylabel('Déformation [%]')
+    ax2.set_ylabel('Contrainte [MPa]')
+    ax2.set_xlabel('temps [s]')
+
+    return fig, (ax1, ax2)
+
+
 def select_files():
-    Tk().withdraw()
-    directory = Path(filedialog.askdirectory())
-    files = filedialog.askopenfilenames(
-        initialdir=directory,
-        filetypes=[('Comma Separated Values', '.csv')]
-    )
-    return [directory/f for f in files]
+    """
+    Select an array of files and return the absolute paths.
+    A message box prompting the user to select more files (potentially from another directory) will appear at each selection.
+
+    Return
+    ------
+    List[str]
+        The selected absolute paths
+    """
+    root = Tk()
+    root.withdraw()
+
+    def main():
+        files = filedialog.askopenfilenames(parent=root,title='Choose files')
+        msgbox = messagebox.askquestion ('Add files','add extra files',icon = 'warning')
+        return files, msgbox
+
+    files, msgbox = main()
+
+    while msgbox =='yes':
+        files_2, msgbox = main()
+        files += files_2
+        
+    root.destroy()
+    return files
 
 
+def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplification=-5000e-6, rolling_window=1):
 
-def main():
-    mat = Material(E=2.59e9, nu=0.35)
     files = select_files()
+    # files = ["data/240410/1bar_000.csv"]
 
     with plt.style.context("ggplot"):
         for file in files:
-            # df = read_with_polars(
-            #     file,
-            #     separator=";",
-            #     skip_rows=7,
-            #     skip_rows_after_header=1
-            # )
-            df = read_with_pandas(
+
+            tensiondf = read(file, sep=";", skiprows=list(range(7))+[8])
+            strains = straindf(tensiondf, angles, amplification)
+            stresses = stressdf(strains, E, nu)
+
+            columns = pd.read_csv(file, sep=";", skiprows=7, nrows=1).columns
+            gauge_channels = _usual_gauge_channels(columns)
+
+            df = read(
                 file,
+                gauge_names=gauge_channels,
                 sep=";",
                 skiprows=list(range(7))+[8],
-                rolling=100
+                rolling_window=rolling_window
             )
-            print(df)
-            # BigBrother(df, mat, -5000e-6)
-            MeanBrother(df, mat, -5000e-6)
+
+            fig, _ = MeanBrother(strains, stresses)
+            # fig, _ = BigBrother(strains, stresses)
+            fig.suptitle(Path(file).stem)
             plt.show()
 
 
