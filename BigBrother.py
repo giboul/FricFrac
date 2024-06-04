@@ -104,9 +104,14 @@ def _usual_gauge_channels(columns: List[str]) -> List[str]:
     # Filter out multiples of 4
     gauge_channels = [g for g in columns if g.removeprefix("Ch").isdecimal() and int(g.removeprefix("Ch")) % 4 != 0]
     # Group by triads
-    gauge_channels = [gauge_channels[3*i:3*i+3] for i, _ in enumerate(gauge_channels[::3])]
+    gauge_channels = triads(gauge_channels)
 
     return gauge_channels
+
+
+def triads(string_list):
+    """Groups list into list of groups of 3 consecutive values"""
+    return [string_list[3*i:3*(i+1)] for i, _ in enumerate(string_list[::3])]
 
 
 def read(file: str, gauge_channels: List[List[str]] = None, rolling_window: int = None, downsample: int = 1, *csv_args, **csv_kwargs):
@@ -266,7 +271,7 @@ def stressdf(strains: pd.DataFrame, E: float, nu: float, timecol: str = "Relativ
     stresses = pd.DataFrame(strains[timecol])
     hooke = plane_stress_matrix(E, nu)
 
-    gauge_channels = [strains.columns[3*i+1:3*(i+1)+1] for i, _ in enumerate(strains.columns[1::3])]
+    gauge_channels = triads(strains.columns[1:])
 
     for channels in gauge_channels:
         stresses[channels] = np.einsum('ij,kj->ki', hooke, strains[channels])
@@ -309,7 +314,7 @@ def BigBrother(strains: pd.DataFrame, stresses: pd.DataFrame, ds: int = 1, timec
     time = strains.pop(timecol)
     stresses.pop(timecol)
 
-    gauge_columns = [strains.columns[3*i:3*(i+1)] for i, _ in enumerate(strains.columns[::3])]
+    gauge_columns = triads(strains.columns)
 
     fig, axes = plt.subplots(nrows=2,
                              ncols=len(gauge_columns),
@@ -341,7 +346,7 @@ def BigBrother(strains: pd.DataFrame, stresses: pd.DataFrame, ds: int = 1, timec
         fig.canvas.draw()
     fig.canvas.mpl_connect('button_press_event', onclick_GridUpdate)
 
-    directions = (r"//", "⊥", "xy")
+    directions = ("//", "⊥", "xy")
     # Plotting each gauge
     for gauge, (cols, axcol) in enumerate(zip(gauge_columns, axes.T), start=1):
 
@@ -375,7 +380,7 @@ def average_rosette(df: pd.DataFrame, timecol = "Relative time") -> pd.DataFrame
     df = df.copy()
     time = df.pop(timecol)
     columns = df.columns
-    gauge_columns = [columns[3*i:3*(i+1)] for i, _ in enumerate(columns[::3])]
+    gauge_columns = triads(columns)
     # Transpose gauge columns for easier indexing later
     gauge_columns = [list(columns) for columns in zip(*gauge_columns)]
 
@@ -513,12 +518,10 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
             tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
 
             if True:
-                strains = straindf(tensiondf, angles, amplification)
-                stresses = stressdf(strains, E, nu)
                 gauge_channels = None
                 plot_func = BigBrother
                 downsample = 5
-            else:
+            elif True:
                 tensiondf = average_rosette(tensiondf)
                 gauge_channels = [["Av01", "Av02", "Av03"]]
                 plot_func = MeanBrother

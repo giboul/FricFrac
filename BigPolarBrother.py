@@ -497,8 +497,6 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
             tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
 
             if True:
-                strains = straindf(tensiondf, angles, amplification)
-                stresses = stressdf(strains, E, nu)
                 gauge_channels = None
                 plot_func = BigBrother
                 downsample = 5
