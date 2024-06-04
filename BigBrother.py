@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from typing import List
 from numpy.typing import ArrayLike, NDArray
 from tkinter import Tk, filedialog, messagebox
+from scipy.signal import butter, filtfilt
 from pathlib import Path
 
 
@@ -149,6 +150,33 @@ def read(file: str, gauge_names: List[List[str]] = None, rolling_window: int = 1
 
     df = df.rolling(rolling_window).mean()
     df = df.dropna()
+
+    return df
+
+
+def lowfilter(df: pd.DataFrame, cutoff: float = 4, N: int = 2, time_col: str = "Relative time") -> NDArray:
+    """
+    Filtering high frequencies in the signal to remove noise.
+
+    Parameters
+    ----------
+    df: pd.DataFrame
+        The DataFrame to filter
+    cutoff: float
+        The cutof frequency
+    N: int
+        The order of the filter
+    
+    Return
+    ------
+    pd.DataFrame
+        With the filtered time-series
+    """
+
+    b, a = butter(N, cutoff * 2*np.diff(df[time_col]).mean())
+
+    for col in df:
+        df[col] = filtfilt(b, a, df[col])
 
     return df
 
@@ -418,19 +446,10 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
         for file in files:
 
             tensiondf = read(file, sep=";", skiprows=list(range(7))+[8])
+            tensiondf = lowfilter(tensiondf)
+
             strains = straindf(tensiondf, angles, amplification)
             stresses = stressdf(strains, E, nu)
-
-            columns = pd.read_csv(file, sep=";", skiprows=7, nrows=1).columns
-            gauge_channels = _usual_gauge_channels(columns)
-
-            df = read(
-                file,
-                gauge_names=gauge_channels,
-                sep=";",
-                skiprows=list(range(7))+[8],
-                rolling_window=rolling_window
-            )
 
             fig, _ = MeanBrother(strains, stresses)
             # fig, _ = BigBrother(strains, stresses)
