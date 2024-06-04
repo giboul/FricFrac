@@ -107,7 +107,7 @@ def _usual_gauge_channels(columns: List[str]) -> List[str]:
     return gauge_channels
 
 
-def read(file: str, gauge_channels: List[List[str]] = None, rolling_window: int = None, *csv_args, **csv_kwargs):
+def read(file: str, gauge_channels: List[List[str]] = None, *csv_args, **csv_kwargs):
     """
     Read a csv file containing groups of gauge results.
     The file should be similar to this (with the time column FIRST):
@@ -130,8 +130,6 @@ def read(file: str, gauge_channels: List[List[str]] = None, rolling_window: int 
         The name of the file to read.
     gauge_channels: List[List[str]]
         The name of the columns to use, grouped by gauge.
-    rolling_window: int
-        Average values over rolling window.
     *csv_args
         Passed to pandas.read_csv.
     **csv_kwargs
@@ -156,11 +154,6 @@ def read(file: str, gauge_channels: List[List[str]] = None, rolling_window: int 
     if not all(len(gns) == 3 for gns in gauge_channels):
         raise ValueError(
             "Not all gauges have the same number of columns.\n"f"{gauge_channels = }")
-
-    if rolling_window is not None:
-        logger.info(f"Computing mean values over {rolling_window = }")
-        df = df.rolling(rolling_window).mean()
-        df = df.drop_nans()
 
     return df
 

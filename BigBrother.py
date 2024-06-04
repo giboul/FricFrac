@@ -112,7 +112,7 @@ def triads(string_list):
     return [string_list[3*i:3*(i+1)] for i, _ in enumerate(string_list[::3])]
 
 
-def read(file: str, gauge_channels: List[List[str]] = None, rolling_window: int = None, downsample: int = 1, *csv_args, **csv_kwargs):
+def read(file: str, gauge_channels: List[List[str]] = None, downsample: int = 1, *csv_args, **csv_kwargs):
     """
     Read a csv file containing groups of gauge results.
     The file should be similar to this (with the time column FIRST):
@@ -135,8 +135,6 @@ def read(file: str, gauge_channels: List[List[str]] = None, rolling_window: int 
         The name of the file to read.
     gauge_channels: List[List[str]]
         The name of the columns to use, grouped by gauge.
-    rolling_window: int
-        Average values over rolling window.
     downsample: int
         Slice the values with `downsample` as step
     *csv_args
@@ -163,11 +161,6 @@ def read(file: str, gauge_channels: List[List[str]] = None, rolling_window: int 
     if not all(len(gns) == 3 for gns in gauge_channels):
         raise ValueError(
             "Not all gauges have the same number of columns.\n"f"{gauge_channels = }")
-
-    if rolling_window is not None:
-        logger.info(f"Computing mean values over {rolling_window = }")
-        df = df.rolling(rolling_window).mean()
-        df = df.dropna()
 
     return df
 
