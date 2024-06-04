@@ -2,3 +2,4 @@
 !*.py
 !*.gif
 !*.ipynb
+!.md
