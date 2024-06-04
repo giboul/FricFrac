@@ -232,7 +232,7 @@ def straindf(tensions: pd.DataFrame, angles: ArrayLike, amplification: float, ga
 
     if gauge_channels is None:
         columns = tensions.columns
-        columns.remove(timecol)
+        columns.drop(timecol)
         gauge_channels = _usual_gauge_channels(tensions.columns)
 
     for channels in gauge_channels:
@@ -512,7 +512,7 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
             tensiondf = read(file, sep=";", skiprows=list(range(7))+[8])
             tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
 
-            if False:
+            if True:
                 strains = straindf(tensiondf, angles, amplification)
                 stresses = stressdf(strains, E, nu)
                 gauge_channels = None
