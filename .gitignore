@@ -1,8 +1,9 @@
 *
 !*.py
-!*.gif
-!*.png
-!*.jpeg
-!*.jpg
 !*.ipynb
 !*.md
+!images
+!*.gif
+!*.png
+!*.jpg
+!*.jpeg
