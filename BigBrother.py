@@ -9,8 +9,6 @@ from scipy.signal import butter, filtfilt
 from pathlib import Path
 import logging
 
-from time import perf_counter
-
 
 logging.basicConfig(format="%(levelname)s %(asctime)s: %(message)s", level=logging.INFO)
 logger = logging.getLogger()
@@ -512,16 +510,14 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
     with plt.style.context("ggplot"):
         for file in files:
 
-            t1 = perf_counter()
-
             tensiondf = read(file, sep=";", skiprows=list(range(7))+[8])
             tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
 
             if True:
                 gauge_channels = None
                 plot_func = BigBrother
-                downsample = 5
-            elif True:
+                downsample = 10
+            else:
                 tensiondf = average_rosette(tensiondf)
                 gauge_channels = [["Av01", "Av02", "Av03"]]
                 plot_func = MeanBrother
@@ -529,8 +525,6 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
 
             strains = straindf(tensiondf, angles, amplification, gauge_channels)
             stresses = stressdf(strains, E, nu)
-
-            print(perf_counter()-t1)
 
             fig, _ = plot_func(strains, stresses, downsample)
             fig.suptitle(Path(file).stem)
