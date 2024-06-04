@@ -175,8 +175,8 @@ def lowfilter(df: pd.DataFrame, cutoff: float = 4, N: int = 2, time_col: str = "
 
     b, a = butter(N, cutoff * 2*np.diff(df[time_col]).mean())
 
-    for col in df:
-        df[col] = filtfilt(b, a, df[col])
+    cols = df.columns.drop(time_col)
+    df[cols] = filtfilt(b, a, df[cols].T).T
 
     return df
 
