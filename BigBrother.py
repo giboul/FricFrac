@@ -159,7 +159,7 @@ def read(file: str, gauge_channels: List[List[str]] = None, *csv_args, **csv_kwa
 
     if gauge_channels is None:
         gauge_channels = _usual_gauge_channels(df.columns)
-        logger.warning(f"Default channels are used.\n\t=> {gauge_channels = }")
+        logger.warning(f"Default channels are used.\n\t>>> {gauge_channels = }")
 
     flattened_gauge_channels = [gn for gnames in gauge_channels
                                 for gn in gnames]
@@ -194,8 +194,8 @@ def lowfilter(df: pd.DataFrame, cutoff: float = 5, N: int = 2, timecol: str = "R
     b, a = butter(N, cutoff, fs=sample_frequency)
 
     logger.info("Smoothing DataFrame.\n"
-                f"\t=> {sample_frequency = }\n"
-                f"\t=> {cutoff = }")
+                f"\t>>> {sample_frequency = }\n"
+                f"\t>>> {cutoff = }")
 
     cols = df.columns.drop(timecol)
     df[cols] = filtfilt(b, a, df[cols].T).T
@@ -226,9 +226,9 @@ def straindf(tensions: pd.DataFrame, angles: ArrayLike, amplification: float, ga
         The dataframe containing the strain for each rosette, in each direction (xx, yy, xy).
     """
     logger.info("Computing all strains.\n"
-                f"\t=> amplification factor = {amplification}\n"
-                f"\t=> {angles = }\n"
-                f"\t=> {gauge_channels = }")
+                f"\t>>> amplification factor = {amplification}\n"
+                f"\t>>> {angles = }\n"
+                f"\t>>> {gauge_channels = }")
 
     strains = pd.DataFrame(tensions[timecol])
     rot_mat = rotation_matrix(angles)
@@ -265,7 +265,7 @@ def stressdf(strains: pd.DataFrame, E: float, nu: float, timecol: str = "Relativ
     pd.DataFrame
         The dataframe containing the stresses for each rosette, in each direction (xx, yy, xy)
     """
-    logger.info(f"INFO: Computing all stresses.\n\t=> {E, nu = }")
+    logger.info(f"INFO: Computing all stresses.\n\t>>> {E, nu = }")
     stresses = pd.DataFrame(strains[timecol])
     hooke = plane_stress_matrix(E, nu)
 
