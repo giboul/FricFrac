@@ -10,7 +10,10 @@ from pathlib import Path
 import logging
 
 
-logging.basicConfig(format="%(levelname)s %(asctime)s: %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(levelname)s %(asctime)s: %(message)s",
+    level=logging.INFO
+)
 logger = logging.getLogger()
 
 
@@ -70,7 +73,7 @@ def plane_stress_matrix(E: float, nu: float) -> NDArray:
         Young's modulus.
     nu: float
         Poisson ration.
-    
+
     Return
     ------
     NDArray
@@ -100,9 +103,11 @@ def _usual_gauge_channels(columns: List[str]) -> List[str]:
         The true columns.
     """
     # Filter out multiples of 4
-    gauge_channels = [g for g in columns if g.removeprefix("Ch").isdecimal() and int(g.removeprefix("Ch")) % 4 != 0]
+    gauge_channels = [g for g in columns if g.removeprefix(
+        "Ch").isdecimal() and int(g.removeprefix("Ch")) % 4 != 0]
     # Group by triads
-    gauge_channels = [gauge_channels[3*i:3*i+3] for i, _ in enumerate(gauge_channels[::3])]
+    gauge_channels = [gauge_channels[3*i:3*i+3]
+                      for i, _ in enumerate(gauge_channels[::3])]
 
     return gauge_channels
 
@@ -148,7 +153,8 @@ def read(file: str, gauge_channels: List[List[str]] = None, *csv_args, **csv_kwa
         gauge_channels = _usual_gauge_channels(df.columns)
         logger.warning(f"Default channels are used.\n\t=> {gauge_channels = }")
 
-    flattened_gauge_channels = [gn for gnames in gauge_channels for gn in gnames]
+    flattened_gauge_channels = [
+        gn for gnames in gauge_channels for gn in gnames]
     df = df[[df.columns[0]] + flattened_gauge_channels]
 
     if not all(len(gns) == 3 for gns in gauge_channels):
@@ -170,7 +176,7 @@ def lowfilter(df: pl.DataFrame, cutoff: float = 5, N: int = 2, time_col: str = "
         The cutof frequency
     N: int
         The order of the filter
-    
+
     Return
     ------
     pl.DataFrame
@@ -193,7 +199,7 @@ def lowfilter(df: pl.DataFrame, cutoff: float = 5, N: int = 2, time_col: str = "
 def straindf(tensions: pl.DataFrame, angles: ArrayLike, amplification: float, gauge_channels: List[List[str]] = None, time_col: str = "Relative time") -> pl.DataFrame:
     """
     Convert the tension measures into strains through the amplification factor and the rotation matrix.
-    
+
     Parameters
     ----------
     tensions: pl.DataFrame
@@ -206,7 +212,7 @@ def straindf(tensions: pl.DataFrame, angles: ArrayLike, amplification: float, ga
         To specify non-standard columns.
     time_col: str = "Relative time"
         To specify the the time column.
-    
+
     Return
     ------
     pl.DataFrame
@@ -233,7 +239,7 @@ def straindf(tensions: pl.DataFrame, angles: ArrayLike, amplification: float, ga
 def stressdf(strains: pl.DataFrame, E: float, nu: float, time_col: str = "Relative time") -> pl.DataFrame:
     """
     Convert the strains into stresses through Hooke's law in plane stress.
-    
+
     Parameters
     ----------
     strains: pl.DataFrame
@@ -244,7 +250,7 @@ def stressdf(strains: pl.DataFrame, E: float, nu: float, time_col: str = "Relati
         Poisson ration.
     time_col: str = "Relative time"
         To specify the the time column
-    
+
     Return
     ------
     pl.DataFrame
@@ -254,7 +260,8 @@ def stressdf(strains: pl.DataFrame, E: float, nu: float, time_col: str = "Relati
     stresses = pl.DataFrame(strains[time_col])
     hooke = plane_stress_matrix(E, nu)
 
-    gauge_channels = [strains.columns[3*i+1:3*(i+1)+1] for i, _ in enumerate(strains.columns[1::3])]
+    gauge_channels = [strains.columns[3*i+1:3*(i+1)+1]
+                      for i, _ in enumerate(strains.columns[1::3])]
 
     for channels in gauge_channels:
         stresses[channels] = np.einsum('ij,kj->ki', hooke, strains[channels])
@@ -262,7 +269,7 @@ def stressdf(strains: pl.DataFrame, E: float, nu: float, time_col: str = "Relati
     return stresses
 
 
-def BigBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = 1, timecol: str = "Relative time"):
+def BigBrother(strains: pl.DataFrame, stresses: pl.DataFrame, timecol: str = "Relative time"):
     """
     Plot stresses and strains for all gauges and their averaged values.
 
@@ -272,8 +279,6 @@ def BigBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = 1, timec
         The DataFrame with the first columns being the time and the rest being the strains.
     stresses: pl.DataFrame
         The DataFrame with the first columns being the time and the rest being the stresses.
-    ds: int
-        Downsample values by using `ds` as the step in the plot slicing.
     timecol: str = None
         The name of the time column if it is not first
 
@@ -301,7 +306,8 @@ def BigBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = 1, timec
                              gridspec_kw=dict(hspace=0, wspace=0),
                              figsize=(10, 5))
     # Vertical lines
-    axlines = [[ax.axvline(0., ls='-.', c='none') for ax in axe] for axe in axes]
+    axlines = [[ax.axvline(0., ls='-.', c='none') for ax in axe]
+               for axe in axes]
 
     def onclick_GridUpdate(event):
         """Function to redraw figure on click events"""
@@ -333,8 +339,8 @@ def BigBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = 1, timec
 
         for lab, strain, stress in zip(directions, gauge_strains, gauge_stresses):
             axcol[0].set_title(f"Rosette {gauge}")
-            axcol[0].plot(time[::ds], strain[::ds]*100, label=rf"$\varepsilon_{{{lab}}}$")
-            axcol[1].plot(time[::ds], stress[::ds]/1e6, label=rf"$\sigma_{{{lab}}}$")
+            axcol[0].plot(time, strain*100, label=rf"$\varepsilon_{{{lab}}}$")
+            axcol[1].plot(time, stress/1e6, label=rf"$\sigma_{{{lab}}}$")
 
     axes[0, 0].legend(loc='upper left')
     axes[1, 0].legend(loc='upper left')
@@ -343,7 +349,8 @@ def BigBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = 1, timec
     axes[1, 0].set_xlabel('temps [s]')
     # Setting up the xlims (more complicated than it should be...)
     tmin, tmax = time.min(), time.max()
-    axes[0, 0].set_xticks([t for t in axes[0, 0].get_xticks() if tmin <= t <= tmax])
+    axes[0, 0].set_xticks(
+        [t for t in axes[0, 0].get_xticks() if tmin <= t <= tmax])
     axes[0, 0].dataLim.x0 = time.min()
     axes[0, 0].dataLim.x1 = time.max()
     # Rotate ticks by 60°
@@ -353,7 +360,7 @@ def BigBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = 1, timec
     return fig, axes
 
 
-def average_rosette(df: pl.DataFrame, timecol = "Relative time") -> pl.DataFrame:
+def average_rosette(df: pl.DataFrame, timecol="Relative time") -> pl.DataFrame:
 
     time = df[timecol]
     columns = df.columns
@@ -371,7 +378,7 @@ def average_rosette(df: pl.DataFrame, timecol = "Relative time") -> pl.DataFrame
     return df
 
 
-def MeanBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = None, timecol: str = "Relative time"):
+def MeanBrother(strains: pl.DataFrame, stresses: pl.DataFrame, timecol: str = "Relative time"):
     """
     Plot stresses and strains for averaging all rosettes, each gauge.
 
@@ -381,8 +388,6 @@ def MeanBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = None, t
         The DataFrame with the first columns being the time and the rest being the strains (averaged values).
     stresses: pl.DataFrame
         The DataFrame with the first columns being the time and the rest being the stresses (averaged values).
-    ds: int
-        Downsample values by using `ds` as the step in the plot slicing.
     timecol: str = None
         The name of the time column if it is not first
 
@@ -402,8 +407,10 @@ def MeanBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = None, t
     columns = strains.columns
     columns.remove(timecol)
 
-    fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True,
-                                   sharey='row', gridspec_kw=dict(hspace=0, wspace=0))
+    fig, (ax1, ax2) = plt.subplots(nrows=2,
+                                   sharex=True,
+                                   sharey='row',
+                                   gridspec_kw=dict(hspace=0, wspace=0))
     # Vertical lines
     axlines = [ax.axvline(0., ls='-.', color='none') for ax in (ax1, ax2)]
 
@@ -433,8 +440,8 @@ def MeanBrother(strains: pl.DataFrame, stresses: pl.DataFrame, ds: int = None, t
     strains = strains[columns].to_numpy().T
     stresses = stresses[columns].to_numpy().T
     for lab, strain, stress in zip(directions, strains, stresses):
-        ax1.plot(time[::ds], strain[::ds]*100, label=rf"$\varepsilon_{{{lab}}}$")
-        ax2.plot(time[::ds], stress[::ds]/1e6, label=rf"$\sigma_{{{lab}}}$")
+        ax1.plot(time, strain*100, label=rf"$\varepsilon_{{{lab}}}$")
+        ax2.plot(time, stress/1e6, label=rf"$\sigma_{{{lab}}}$")
 
     ax1.legend(loc='upper left')
     ax2.legend(loc='upper left')
@@ -460,16 +467,20 @@ def select_files():
     root.withdraw()
 
     def main():
-        files = filedialog.askopenfilenames(parent=root,title='Choose files')
-        msgbox = messagebox.askquestion ('Add files','add extra files',icon = 'warning')
+        files = filedialog.askopenfilenames(parent=root, title='Choose files')
+        msgbox = messagebox.askquestion(
+            'Add files',
+            'add extra files',
+            icon='question'
+        )
         return files, msgbox
 
     files, msgbox = main()
 
-    while msgbox =='yes':
+    while msgbox == 'yes':
         files_2, msgbox = main()
         files += files_2
-        
+
     root.destroy()
     return files
 
@@ -482,23 +493,27 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
     with plt.style.context("ggplot"):
         for file in files:
 
-            tensiondf = read(file, separator=";", skip_rows=7, skip_rows_after_header=1)
+            tensiondf = read(file,
+                             separator=";",
+                             skip_rows=7,
+                             skip_rows_after_header=1)
             # tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
 
             if False:
                 gauge_channels = None
                 plot_func = BigBrother
-                downsample = 5
             else:
                 tensiondf = average_rosette(tensiondf)
                 gauge_channels = [["Av01", "Av02", "Av03"]]
                 plot_func = MeanBrother
-                downsample = 1
 
-            strains = straindf(tensiondf, angles, amplification, gauge_channels)
+            strains = straindf(tensiondf,
+                               angles,
+                               amplification,
+                               gauge_channels)
             stresses = stressdf(strains, E, nu)
 
-            fig, ax = plot_func(strains, stresses, downsample)
+            fig, ax = plot_func(strains[::10], stresses[::10])
             fig.suptitle(Path(file).stem)
             fig.savefig("Magnificent plot.pdf", bbox_inches='tight')
             plt.show()

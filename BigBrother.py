@@ -74,7 +74,7 @@ def plane_stress_matrix(E: float, nu: float) -> NDArray:
         Young's modulus.
     nu: float
         Poisson ration.
-    
+
     Return
     ------
     NDArray
@@ -161,7 +161,8 @@ def read(file: str, gauge_channels: List[List[str]] = None, *csv_args, **csv_kwa
         gauge_channels = _usual_gauge_channels(df.columns)
         logger.warning(f"Default channels are used.\n\t=> {gauge_channels = }")
 
-    flattened_gauge_channels = [gn for gnames in gauge_channels for gn in gnames]
+    flattened_gauge_channels = [gn for gnames in gauge_channels
+                                for gn in gnames]
     df = df[[df.columns[0]] + flattened_gauge_channels]
 
     if not all(len(gns) == 3 for gns in gauge_channels):
@@ -183,7 +184,7 @@ def lowfilter(df: pd.DataFrame, cutoff: float = 5, N: int = 2, timecol: str = "R
         The cutof frequency
     N: int
         The order of the filter
-    
+
     Return
     ------
     pd.DataFrame
@@ -205,7 +206,7 @@ def lowfilter(df: pd.DataFrame, cutoff: float = 5, N: int = 2, timecol: str = "R
 def straindf(tensions: pd.DataFrame, angles: ArrayLike, amplification: float, gauge_channels: List[List[str]] = None, timecol: str = "Relative time") -> pd.DataFrame:
     """
     Convert the tension measures into strains through the amplification factor and the rotation matrix.
-    
+
     Parameters
     ----------
     tensions: pd.DataFrame
@@ -218,7 +219,7 @@ def straindf(tensions: pd.DataFrame, angles: ArrayLike, amplification: float, ga
         To specify non-standard columns.
     timecol: str = "Relative time"
         To specify the the time column.
-    
+
     Return
     ------
     pd.DataFrame
@@ -247,7 +248,7 @@ def straindf(tensions: pd.DataFrame, angles: ArrayLike, amplification: float, ga
 def stressdf(strains: pd.DataFrame, E: float, nu: float, timecol: str = "Relative time") -> pd.DataFrame:
     """
     Convert the strains into stresses through Hooke's law in plane stress.
-    
+
     Parameters
     ----------
     strains: pd.DataFrame
@@ -258,7 +259,7 @@ def stressdf(strains: pd.DataFrame, E: float, nu: float, timecol: str = "Relativ
         Poisson ration.
     timecol: str = "Relative time"
         To specify the the time column
-    
+
     Return
     ------
     pd.DataFrame
@@ -318,7 +319,8 @@ def BigBrother(strains: pd.DataFrame, stresses: pd.DataFrame, timecol: str = Non
                              gridspec_kw=dict(hspace=0, wspace=0),
                              figsize=(10, 5))
     # Vertical lines
-    axlines = [[ax.axvline(0., ls='-.', c='none') for ax in axe] for axe in axes]
+    axlines = [[ax.axvline(0., ls='-.', c='none') for ax in axe]
+               for axe in axes]
 
     def onclick_GridUpdate(event):
         """Function to redraw figure on click events"""
@@ -360,7 +362,8 @@ def BigBrother(strains: pd.DataFrame, stresses: pd.DataFrame, timecol: str = Non
     axes[1, 0].set_xlabel('temps [s]')
     # Setting up the xlims (more complicated than it should be...)
     tmin, tmax = time.min(), time.max()
-    axes[0, 0].set_xticks([t for t in axes[0, 0].get_xticks() if tmin <= t <= tmax])
+    axes[0, 0].set_xticks([t for t in axes[0, 0].get_xticks()
+                           if tmin <= t <= tmax])
     axes[0, 0].dataLim.x0 = time.min()
     axes[0, 0].dataLim.x1 = time.max()
     # Rotate ticks by 60°
@@ -370,7 +373,7 @@ def BigBrother(strains: pd.DataFrame, stresses: pd.DataFrame, timecol: str = Non
     return fig, axes
 
 
-def average_rosette(df: pd.DataFrame, timecol = "Relative time") -> pd.DataFrame:
+def average_rosette(df: pd.DataFrame, timecol="Relative time") -> pd.DataFrame:
 
     df = df.copy()
     time = df.pop(timecol)
@@ -483,16 +486,20 @@ def select_files():
     root.withdraw()
 
     def main():
-        files = filedialog.askopenfilenames(parent=root,title='Choose files')
-        msgbox = messagebox.askquestion ('Add files','add extra files',icon = 'warning')
+        files = filedialog.askopenfilenames(parent=root, title='Choose files')
+        msgbox = messagebox.askquestion(
+            'Add files',
+            'add extra files',
+            icon='question'
+        )
         return files, msgbox
 
     files, msgbox = main()
 
-    while msgbox =='yes':
+    while msgbox == 'yes':
         files_2, msgbox = main()
         files += files_2
-        
+
     root.destroy()
     return files
 
@@ -516,7 +523,10 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
                 gauge_channels = [["Av01", "Av02", "Av03"]]
                 plot_func = MeanBrother
 
-            strains = straindf(tensiondf, angles, amplification, gauge_channels)
+            strains = straindf(tensiondf,
+                               angles,
+                               amplification,
+                               gauge_channels)
             stresses = stressdf(strains, E, nu)
 
             fig, _ = plot_func(strains[::10], stresses[::10])
