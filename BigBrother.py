@@ -311,6 +311,10 @@ def BigBrother(strains: pd.DataFrame, stresses: pd.DataFrame, timecol: str = Non
     stresses.pop(timecol)
 
     gauge_columns = triads(strains.columns)
+    assert len(gauge_columns) > 1, (
+        "Please either provide more than one triad of columns for "
+        "`BigBrother` or use `MeanBrother` with the desired triad.\n"
+    )
 
     fig, axes = plt.subplots(nrows=2,
                              ncols=len(gauge_columns),
@@ -513,13 +517,16 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
         for file in files:
 
             tensiondf = read(file, sep=";", skiprows=list(range(7))+[8])
-            tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
+            # tensiondf = lowfilter(tensiondf, cutoff=5, N=3)  # comment to not filter
 
-            if False:
-                gauge_channels = None
+            if False:  # True => plot each individual gauge
+                gauge_channels = [  # Must have at least two triads of columns
+                    ["Ch01", "Ch02", "Ch03"],
+                    ["Ch05", "Ch06", "Ch07"],
+                ]
                 plot_func = BigBrother
-            else:
-                tensiondf = average_rosette(tensiondf)
+            else:  # Plot only mean values
+                tensiondf = average_rosette(tensiondf[["Relative time", "Ch01", "Ch02", "Ch03"]])
                 gauge_channels = [["Av01", "Av02", "Av03"]]
                 plot_func = MeanBrother
 
