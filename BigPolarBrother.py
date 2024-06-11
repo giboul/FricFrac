@@ -191,7 +191,9 @@ def lowfilter(df: pl.DataFrame, cutoff: float = 5, N: int = 2, time_col: str = "
 
     cols = df.columns
     cols.remove(time_col)
-    df[cols] = filtfilt(b, a, df[cols].to_numpy().T).T
+
+    for col in cols:
+        df = df.with_columns(**{col: filtfilt(b, a, df[col])})
 
     return df
 
@@ -497,7 +499,8 @@ def main(E: float = 2.59e9, nu: float = 0.35, angles=(45, 90, 135), amplificatio
                              separator=";",
                              skip_rows=7,
                              skip_rows_after_header=1)
-            # tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
+            # exit()
+            tensiondf = lowfilter(tensiondf, cutoff=5, N=3)
 
             if False:
                 gauge_channels = None
