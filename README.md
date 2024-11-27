@@ -51,6 +51,6 @@ Here is a gif to simulate an interactive plot
 
 <img src="images/PlatePlot.gif">
 
-## The `BogPolarBrother`
+## The `BigPolarBrother`
 
 Is a duplicate of the `BigBrother` script with polars instead of pandas.
